@@ -14,7 +14,7 @@ std::vector<std::string> split(const std::string &s, const char delim) {
 }
 
 std::string pwd() {
-  std::string usr = getenv("HOME");
+  //std::string usr = getenv("HOME");
   if (char buffer[PATH_MAX]; getcwd(buffer, PATH_MAX) != nullptr) {
     return buffer;
   }
