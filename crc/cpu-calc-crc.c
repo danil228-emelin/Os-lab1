@@ -11,7 +11,6 @@ void print_usage(const char *program_name) {
     printf("Options:\n");
     printf("  -i, --iterations NUMBER  Number of CRC calculation iterations (default: 1000)\n");
     printf("  -s, --size SIZE          Data size in KB (default: 1024 = 1MB)\n");
-    printf("  -t, --threads NUMBER     Number of threads (for future use)\n");
     printf("  -v, --verbose            Verbose output\n");
     printf("  -h, --help               Show this help message\n");
     printf("\n");
@@ -82,7 +81,6 @@ int main(int argc, char *argv[]) {
         printf("=======================================\n");
     }
     
-    // Инициализация CRC таблицы
     init_crc32_table();
     
     if (verbose) {

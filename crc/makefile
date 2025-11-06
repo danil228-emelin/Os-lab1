@@ -14,6 +14,9 @@ optimized: cpu-calc-crc.c crc.c
 clean:
 	rm -f $(TARGETS) cpu-calc-crc-opt
 
+#https://www.brendangregg.com/perf.html
+
+# Detailed CPU counter statistics (includes extras) for the specified command:
 count-crc: cpu-calc-crc
 	perf stat -d ./cpu-calc-crc
 
