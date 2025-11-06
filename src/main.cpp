@@ -13,7 +13,7 @@
 
 using namespace std;
 
-const set<string> specCommands = {"cd", "export", "unset", "or"};
+const set<string> specCommands = {"cd", "export", "unset"};
 
 void handle_signal(const int sig) {
   if (sig == SIGINT) {
@@ -26,7 +26,7 @@ void handle_signal(const int sig) {
 
 bool exec_spec_commands(char **argv) {
   if (string(argv[0]) == "cd") {
-      string path = getenv("HOME");
+       string path = getenv("HOME");
 
     if (argv[1] == nullptr) {
 
@@ -68,6 +68,8 @@ int child_routine(void *arg) {
   return 0;
 }
 
+
+
 int execute_command(vector<string> args) {
   if (args.empty()) {
     return 0;
@@ -108,23 +110,37 @@ int execute_command(vector<string> args) {
   return WEXITSTATUS(status);
 }
 
-bool handle_or_command(const vector<string>& args) {
+bool handle_or_command(char** args, size_t arg_count) {
+  // Найти позицию "or" в аргументах
   size_t or_pos = 0;
-  for (size_t i = 0; i < args.size(); ++i) {
-    if (args[i] == "or") {
-      or_pos = i;
-      break;
-    }
+  bool found_or = false;
+  
+  for (size_t i = 0; i < arg_count; ++i) {
+      if (string(args[i]) == "or") {
+          or_pos = i;
+          found_or = true;
+          break;
+      }
+  }
+  
+  if (!found_or || or_pos == 0 || or_pos >= arg_count - 1) {
+      cerr << "or: invalid syntax. Usage: command1 or command2" << endl;
+      return false;
   }
 
-  if (or_pos == 0 || or_pos >= args.size() - 1) {
-    cerr << "or: invalid syntax. Usage: command1 or command2" << endl;
-    return false;
+  // Создать первую команду (до "or")
+  vector<string> first_command;
+  for (size_t i = 0; i < or_pos; ++i) {
+      first_command.push_back(args[i]);
   }
 
-  vector<string> first_command(args.begin(), args.begin() + or_pos);
-  vector<string> second_command(args.begin() + or_pos + 1, args.end());
+  // Создать вторую команду (после "or")
+  vector<string> second_command;
+  for (size_t i = or_pos + 1; i < arg_count; ++i) {
+      second_command.push_back(args[i]);
+  }
 
+  // Выполнить первую команду
   auto start = chrono::high_resolution_clock::now();
   int exit_code = execute_command(first_command);
   auto end = chrono::high_resolution_clock::now();
@@ -133,21 +149,20 @@ bool handle_or_command(const vector<string>& args) {
   cout << "First command elapsed time: " << elapsed_ms.count() << " ms" << endl;
   cout << "First command exit code: " << exit_code << endl;
 
+  // Если первая команда неуспешна, выполнить вторую
   if (exit_code != 0) {
-    cout << "First command failed, executing second command..." << endl;
-    start = chrono::high_resolution_clock::now();
-    exit_code = execute_command(second_command);
-    end = chrono::high_resolution_clock::now();
-    elapsed_ms = chrono::duration_cast<chrono::milliseconds>(end - start);
-    
-    cout << "Second command elapsed time: " << elapsed_ms.count() << " ms" << endl;
-    cout << "Second command exit code: " << exit_code << endl;
-  } else {
-    cout << "First command succeeded, skipping second command" << endl;
+      start = chrono::high_resolution_clock::now();
+      exit_code = execute_command(second_command);
+      end = chrono::high_resolution_clock::now();
+      elapsed_ms = chrono::duration_cast<chrono::milliseconds>(end - start);
+      
+      cout << "Second command elapsed time: " << elapsed_ms.count() << " ms" << endl;
+      cout << "Second command exit code: " << exit_code << endl;
   }
 
   return true;
 }
+
 
 int main() {
   string input;
@@ -164,15 +179,23 @@ int main() {
       continue;
     }
 
+    bool has_or = false;
     for (const auto& arg : args) {
-      if (arg == "or") {
-        handle_or_command(args);
-      continue;
-      }
+        if (arg == "or") {
+            has_or = true;
+            break;
+        }
     }
 
-    // Обычная команда без or
+
     char **argv = get_argv_ptr(args);
+    size_t arg_count = args.size();
+
+    if (has_or) {
+      handle_or_command(argv, arg_count);
+      free_argv(argv, arg_count);
+      continue;
+  }
 
     if (string(argv[0]) == "exit") {
       free_argv(argv, args.size());
@@ -193,7 +216,6 @@ int main() {
     if (pid == -1) {
       perror("create_process");
       free_argv(argv, args.size());
-      return 1;
     }
     if (pid == 0) {
       child_routine(argv);
