@@ -26,16 +26,16 @@ void handle_signal(const int sig) {
 
 bool exec_spec_commands(char **argv) {
   if (string(argv[0]) == "cd") {
+      string path = getenv("HOME");
 
     if (argv[1] == nullptr) {
-      string path = getenv("HOME");
-      
-      argv[1] = path.data();
-      cerr <<argv[1]<< endl;
 
+      argv[1] = path.data();
+     
     }
     if (chdir(argv[1]) != 0) {
       perror("chdir");
+      cerr << "dir:" <<argv[1]<< endl;
       return false;
     }
   } else if (string(argv[0]) == "export") {
@@ -164,17 +164,11 @@ int main() {
       continue;
     }
 
-    bool has_or = false;
     for (const auto& arg : args) {
       if (arg == "or") {
-        has_or = true;
-        break;
-      }
-    }
-
-    if (has_or) {
-      handle_or_command(args);
+        handle_or_command(args);
       continue;
+      }
     }
 
     // Обычная команда без or
