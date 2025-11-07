@@ -27,3 +27,8 @@ void free_argv(char **argv, const size_t size) {
   }
   delete[] argv;
 }
+
+//1)//\n ->n +
+//2)or -> || +
+//3) add &
+//4) add pipe +
