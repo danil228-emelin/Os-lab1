@@ -73,18 +73,17 @@ bool exec_spec_commands(char **argv) {
   return true;
 }
 
-// Функция для применения перенаправлений в дочернем процессе
 void apply_redirections_in_child(const vector<pair<string, string>>& redirections) {
     for (const auto& redir : redirections) {
         if (redir.first == ">") {
             // Перенаправление вывода (перезапись)
             int fd = open(redir.second.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
             if (fd == -1) {
-                perror("open");
+                cout << "open error: " << redir.second << endl;
                 exit(1);
             }
             if (dup2(fd, STDOUT_FILENO) == -1) {
-                perror("dup2");
+                cout << "dup2 error" << endl;
                 close(fd);
                 exit(1);
             }
@@ -93,11 +92,11 @@ void apply_redirections_in_child(const vector<pair<string, string>>& redirection
             // Перенаправление вывода (добавление)
             int fd = open(redir.second.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0644);
             if (fd == -1) {
-                perror("open");
+                cout << "open error: " << redir.second << endl;
                 exit(1);
             }
             if (dup2(fd, STDOUT_FILENO) == -1) {
-                perror("dup2");
+                cout << "dup2 error" << endl;
                 close(fd);
                 exit(1);
             }
@@ -106,11 +105,11 @@ void apply_redirections_in_child(const vector<pair<string, string>>& redirection
             // Перенаправление ввода
             int fd = open(redir.second.c_str(), O_RDONLY);
             if (fd == -1) {
-                perror("open");
+                cout << "open error: " << redir.second << endl;
                 exit(1);
             }
             if (dup2(fd, STDIN_FILENO) == -1) {
-                perror("dup2");
+                cout << "dup2 error" << endl;
                 close(fd);
                 exit(1);
             }
@@ -135,7 +134,7 @@ pair<vector<string>, vector<pair<string, string>>> parse_redirections(const vect
     for (size_t i = 0; i < args.size(); ++i) {
         if (redirOperators.count(args[i])) {
             if (i + 1 >= args.size()) {
-                cerr << "Syntax error: missing filename for " << args[i] << endl;
+                cout << "Syntax error: missing filename for " << args[i] << endl;
                 return {command_args, redirections};
             }
             redirections.push_back({args[i], args[i + 1]});
@@ -149,86 +148,89 @@ pair<vector<string>, vector<pair<string, string>>> parse_redirections(const vect
 }
 
 int execute_command(vector<string> args, bool background = false) {
-  if (args.empty()) {
-    return 0;
-  }
-
-  // Парсим перенаправления
-  auto [command_args, redirections] = parse_redirections(args);
+    if (args.empty()) {
+      return 0;
+    }
   
-  if (command_args.empty()) {
-      cerr << "Syntax error: command expected" << endl;
+    // Парсим перенаправления
+    auto [command_args, redirections] = parse_redirections(args);
+    
+    if (command_args.empty()) {
+        cout << "Syntax error: command expected" << endl;
+        return 1;
+    }
+  
+    char **argv = get_argv_ptr(command_args);
+  
+    if (string(argv[0]) == "exit") {
+      free_argv(argv, command_args.size());
+      exit(EXIT_SUCCESS);
+    }
+  
+    if (specCommands.contains(argv[0])) {
+      // Специальные команды не поддерживают перенаправления
+      if (!redirections.empty()) {
+          cout << "Special commands do not support redirections" << endl;
+          free_argv(argv, command_args.size());
+          return 1;
+      }
+      bool success = exec_spec_commands(argv);
+      free_argv(argv, command_args.size());
+      return success ? 0 : 1;
+    }
+  
+    // 1. Сначала создаем дочерний процесс
+    const long pid = create_process();
+    if (pid == -1) {
+      cout << "create_process error" << endl;
+      free_argv(argv, command_args.size());
       return 1;
-  }
-
-  char **argv = get_argv_ptr(command_args);
-
-  if (string(argv[0]) == "exit") {
-    free_argv(argv, command_args.size());
-    exit(EXIT_SUCCESS);
-  }
-
-  if (specCommands.contains(argv[0])) {
-    // Специальные команды не поддерживают перенаправления
-    if (!redirections.empty()) {
-        cerr << "Special commands do not support redirections" << endl;
+    }
+  
+    if (pid == 0) {
+      // 2. В дочернем процессе применяем перенаправления (если есть)
+      if (!redirections.empty()) {
+          apply_redirections_in_child(redirections);
+      }
+      
+      // 3. Затем выполняем команду
+      child_routine(argv);
+      
+      // Если child_routine вернула управление, значит произошла ошибка
+      exit(1);
+    }
+  
+    if (background) {
+      background_processes.push_back(pid);
+      cout << "[Background process started with PID: " << pid << "]" << endl;
+      free_argv(argv, command_args.size());
+      return 0;
+    }
+  
+    // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: правильно ждем завершения дочернего процесса
+    int status;
+    pid_t result;
+    do {
+        result = waitpid(static_cast<pid_t>(pid), &status, 0);
+    } while (result == -1 && errno == EINTR); // Перезапускаем если прервано сигналом
+  
+    if (result == -1) {
+        cout << "waitpid error" << endl;
         free_argv(argv, command_args.size());
         return 1;
     }
-    bool success = exec_spec_commands(argv);
-    free_argv(argv, command_args.size());
-    return success ? 0 : 1;
-  }
-
-  // 1. Сначала создаем дочерний процесс
-  const long pid = create_process();
-  if (pid == -1) {
-    perror("create_process");
-    free_argv(argv, command_args.size());
-    return 1;
-  }
-
-  if (pid == 0) {
-    // 2. В дочернем процессе применяем перенаправления (если есть)
-    if (!redirections.empty()) {
-        apply_redirections_in_child(redirections);
-    }
-    
-    // 3. Затем выполняем команду
-    child_routine(argv);
-  }
-
-  if (background) {
-    background_processes.push_back(pid);
-    cout << "[Background process started with PID: " << pid << "]" << endl;
-    free_argv(argv, command_args.size());
-    return 0;
-  }
-
-  // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: правильно ждем завершения дочернего процесса
-  int status;
-  pid_t result;
-  do {
-      result = waitpid(static_cast<pid_t>(pid), &status, 0);
-  } while (result == -1 && errno == EINTR); // Перезапускаем если прервано сигналом
-
-  if (result == -1) {
-      perror("waitpid");
-      free_argv(argv, command_args.size());
-      return 1;
-  }
-
-  free_argv(argv, command_args.size());
   
-  if (WIFEXITED(status)) {
-      return WEXITSTATUS(status);
-  } else if (WIFSIGNALED(status)) {
-      cout << "Process terminated by signal: " << WTERMSIG(status) << endl;
-      return 128 + WTERMSIG(status);
-  } else {
-      return 1;
+    free_argv(argv, command_args.size());
+    
+    if (WIFEXITED(status)) {
+        return WEXITSTATUS(status);
+    } else if (WIFSIGNALED(status)) {
+        cout << "Process terminated by signal: " << WTERMSIG(status) << endl;
+        return 128 + WTERMSIG(status);
+    } else {
+        return 1;
+    }
   }
-}
 
 // Обновленная функция для конвейеров
 int execute_pipeline(vector<vector<string>> commands) {
@@ -403,18 +405,23 @@ int main() {
     while (true) {
         cleanup_background_processes();
         
+        // Выводим приглашение только в интерактивном режиме
         if (interactive) {
             cout << "$ ";
             cout.flush();
         }
         
+        // Чтение ввода с проверкой на Ctrl+D (EOF)
         if (!getline(cin, input)) {
             if (cin.eof()) {
+                // Обнаружен Ctrl+D - выходим из shell
                 break;
+            } else {
+                // Другая ошибка ввода
+                cerr << "Input error occurred" << endl;
+                cin.clear(); // Сбрасываем флаги ошибок
+                continue;
             }
-            cerr << "Input error occurred" << endl;
-            cin.clear();
-            continue;
         }
         
         // Обработка экранированных символов
@@ -427,7 +434,7 @@ int main() {
             }
         }
         
-        // УДАЛЯЕМ ПРОБЕЛЫ В НАЧАЛЕ И КОНЦЕ СТРОКИ (переименовали переменные)
+        // УДАЛЯЕМ ПРОБЕЛЫ В НАЧАЛЕ И КОНЦЕ СТРОКИ
         size_t trim_start = cleaned_input.find_first_not_of(" \t");
         if (trim_start == string::npos) {
             // Строка состоит только из пробелов
@@ -557,17 +564,24 @@ int main() {
         }
 
         // Выполнение обычной команды
-        auto cmd_start = chrono::high_resolution_clock::now();  // ПЕРЕИМЕНОВАНО
+        auto cmd_start = chrono::high_resolution_clock::now();
         int exit_code = execute_command(args_to_use, background);
-        auto cmd_end = chrono::high_resolution_clock::now();    // ПЕРЕИМЕНОВАНО
+        auto cmd_end = chrono::high_resolution_clock::now();
         
+        // Вывод времени выполнения только для foreground процессов в интерактивном режиме
         if (!background && interactive) {
-            auto elapsed_ms = chrono::duration_cast<chrono::milliseconds>(cmd_end - cmd_start);  // ИСПРАВЛЕНО
+            auto elapsed_ms = chrono::duration_cast<chrono::milliseconds>(cmd_end - cmd_start);
+            // Раскомментируйте если нужно показывать время выполнения
+            // cout << "Elapsed time: " << elapsed_ms.count() << " ms" << endl;
         }
 
         free_argv(argv, args_to_use.size());
+        
+        // НЕ ВЫВОДИМ ПРИГЛАШЕНИЕ ЗДЕСЬ!
+        // Приглашение будет выведено в начале следующей итерации цикла
     }
 
+    // Cleanup только в интерактивном режиме
     if (interactive) {
         // Завершаем все фоновые процессы
         for (auto it = background_processes.begin(); it != background_processes.end(); ) {

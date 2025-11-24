@@ -7,7 +7,7 @@
 
 long create_process() {
   clone_args args = {};
-  args.flags = CLONE_FS | CLONE_FILES;
+  args.flags = 0;
   args.exit_signal = SIGCHLD;
   return syscall(SYS_clone3, &args, sizeof(args));
 }
