@@ -121,6 +121,8 @@ void apply_redirections_in_child(const vector<pair<string, string>>& redirection
 
 int child_routine(void *arg) {
   if (const auto argv = static_cast<char **>(arg); execvp(argv[0], argv) == -1) {
+    cerr << "Command not found"<< endl;
+
     exit(1);
   }
   return 0;
@@ -394,6 +396,7 @@ vector<vector<string>> parse_pipeline(const vector<string>& args) {
 
 int main() {
     string input;
+    bool interactive = isatty(STDIN_FILENO);  // Проверяем, интерактивный ли режим
 
     // Устанавливаем обработчики сигналов
     signal(SIGINT, handle_signal);
@@ -402,7 +405,11 @@ int main() {
     while (true) {
         cleanup_background_processes();
         
-        cout <<"$ ";
+        // Выводим приглашение только в интерактивном режиме
+        if (interactive) {
+            cout << "$ ";
+            cout.flush();
+        }
         
         // Чтение ввода с проверкой на Ctrl+D (EOF)
         if (!getline(cin, input)) {
@@ -538,60 +545,59 @@ int main() {
         int exit_code = execute_command(args, background);
         auto end = chrono::high_resolution_clock::now();
         
-        // Вывод времени выполнения для foreground процессов
-        if (!background) {
-            if (exit_code==0){
-                auto elapsed_ms = chrono::duration_cast<chrono::milliseconds>(end - start);
-                //cout << "Elapsed time: " << elapsed_ms.count() << " ms" << endl;
-                //cout << "Exit code: " << exit_code << endl;
-            }
-            }
-          
+        // Вывод времени выполнения для foreground процессов (только в интерактивном режиме)
+        if (!background && interactive) {
+            auto elapsed_ms = chrono::duration_cast<chrono::milliseconds>(end - start);
+            //cout << "Elapsed time: " << elapsed_ms.count() << " ms" << endl;
+            //cout << "Exit code: " << exit_code << endl;
+        }
 
         free_argv(argv, args.size());
     }
 
-    
-    // Завершаем все фоновые процессы
-    for (auto it = background_processes.begin(); it != background_processes.end(); ) {
-        int status;
-        pid_t pid = *it;
-        
-        // Проверяем, завершился ли процесс
-        if (waitpid(pid, &status, WNOHANG) > 0) {
-            cout << "[Background process " << pid << " already finished]" << endl;
-            it = background_processes.erase(it);
-        } else {
-            // Процесс еще работает, отправляем SIGTERM
-            cout << "Sending SIGTERM to background process " << pid << endl;
-            kill(pid, SIGTERM);
-            ++it;
-        }
-    }
-    
-    // Даем процессам время на корректное завершение
-    if (!background_processes.empty()) {
-        cout << "Waiting for background processes to terminate..." << endl;
-        sleep(2);
-    }
-    
-    // Принудительно завершаем оставшиеся процессы
-    for (auto it = background_processes.begin(); it != background_processes.end(); ) {
-        int status;
-        pid_t pid = *it;
-        
-        if (waitpid(pid, &status, WNOHANG) > 0) {
-            cout << "[Background process " << pid << " terminated]" << endl;
-            it = background_processes.erase(it);
-        } else {
-            // Процесс все еще жив, отправляем SIGKILL
-            cout << "Sending SIGKILL to background process " << pid << endl;
-            kill(pid, SIGKILL);
+    // Cleanup только в интерактивном режиме
+    if (interactive) {
+        // Завершаем все фоновые процессы
+        for (auto it = background_processes.begin(); it != background_processes.end(); ) {
+            int status;
+            pid_t pid = *it;
             
-            // Ждем завершения
-            waitpid(pid, &status, 0);
-            cout << "[Background process " << pid << " killed]" << endl;
-            it = background_processes.erase(it);
+            // Проверяем, завершился ли процесс
+            if (waitpid(pid, &status, WNOHANG) > 0) {
+                cout << "[Background process " << pid << " already finished]" << endl;
+                it = background_processes.erase(it);
+            } else {
+                // Процесс еще работает, отправляем SIGTERM
+                cout << "Sending SIGTERM to background process " << pid << endl;
+                kill(pid, SIGTERM);
+                ++it;
+            }
+        }
+        
+        // Даем процессам время на корректное завершение
+        if (!background_processes.empty()) {
+            cout << "Waiting for background processes to terminate..." << endl;
+            sleep(2);
+        }
+        
+        // Принудительно завершаем оставшиеся процессы
+        for (auto it = background_processes.begin(); it != background_processes.end(); ) {
+            int status;
+            pid_t pid = *it;
+            
+            if (waitpid(pid, &status, WNOHANG) > 0) {
+                cout << "[Background process " << pid << " terminated]" << endl;
+                it = background_processes.erase(it);
+            } else {
+                // Процесс все еще жив, отправляем SIGKILL
+                cout << "Sending SIGKILL to background process " << pid << endl;
+                kill(pid, SIGKILL);
+                
+                // Ждем завершения
+                waitpid(pid, &status, 0);
+                cout << "[Background process " << pid << " killed]" << endl;
+                it = background_processes.erase(it);
+            }
         }
     }
     
