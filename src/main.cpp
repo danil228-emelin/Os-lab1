@@ -121,8 +121,7 @@ void apply_redirections_in_child(const vector<pair<string, string>>& redirection
 
 int child_routine(void *arg) {
   if (const auto argv = static_cast<char **>(arg); execvp(argv[0], argv) == -1) {
-    cerr << "Command not found"<< endl;
-
+    cout << "Command not found"<< endl;
     exit(1);
   }
   return 0;
