@@ -121,7 +121,7 @@ void apply_redirections_in_child(const vector<pair<string, string>>& redirection
 
 int child_routine(void *arg) {
   if (const auto argv = static_cast<char **>(arg); execvp(argv[0], argv) == -1) {
-    cout << "Command not found"<< endl;
+    cerr << "Command not found"<< endl;
     exit(1);
   }
   return 0;
@@ -395,32 +395,26 @@ vector<vector<string>> parse_pipeline(const vector<string>& args) {
 
 int main() {
     string input;
-    bool interactive = isatty(STDIN_FILENO);  // Проверяем, интерактивный ли режим
+    bool interactive = isatty(STDIN_FILENO);
 
-    // Устанавливаем обработчики сигналов
     signal(SIGINT, handle_signal);
     signal(SIGQUIT, handle_signal);
 
     while (true) {
         cleanup_background_processes();
         
-        // Выводим приглашение только в интерактивном режиме
         if (interactive) {
             cout << "$ ";
             cout.flush();
         }
         
-        // Чтение ввода с проверкой на Ctrl+D (EOF)
         if (!getline(cin, input)) {
             if (cin.eof()) {
-                // Обнаружен Ctrl+D - выходим из shell
                 break;
-            } else {
-                // Другая ошибка ввода
-                cerr << "Input error occurred" << endl;
-                cin.clear(); // Сбрасываем флаги ошибок
-                continue;
             }
+            cerr << "Input error occurred" << endl;
+            cin.clear();
+            continue;
         }
         
         // Обработка экранированных символов
@@ -433,7 +427,15 @@ int main() {
             }
         }
         
-        // Пропускаем пустые строки
+        // УДАЛЯЕМ ПРОБЕЛЫ В НАЧАЛЕ И КОНЦЕ СТРОКИ (переименовали переменные)
+        size_t trim_start = cleaned_input.find_first_not_of(" \t");
+        if (trim_start == string::npos) {
+            // Строка состоит только из пробелов
+            continue;
+        }
+        size_t trim_end = cleaned_input.find_last_not_of(" \t");
+        cleaned_input = cleaned_input.substr(trim_start, trim_end - trim_start + 1);
+        
         if (cleaned_input.empty()) {
             continue;
         }
@@ -444,7 +446,7 @@ int main() {
             background = true;
             cleaned_input.pop_back();
             // Убираем пробелы перед &
-            while (!cleaned_input.empty() && cleaned_input.back() == ' ') {
+            while (!cleaned_input.empty() && (cleaned_input.back() == ' ' || cleaned_input.back() == '\t')) {
                 cleaned_input.pop_back();
             }
         }
@@ -455,9 +457,24 @@ int main() {
             continue;
         }
 
+        // УДАЛЯЕМ ПУСТЫЕ АРГУМЕНТЫ (если split возвращает пустые строки)
+        vector<string> filtered_args;
+        for (const auto& arg : args) {
+            if (!arg.empty()) {
+                filtered_args.push_back(arg);
+            }
+        }
+        
+        if (filtered_args.empty()) {
+            continue;
+        }
+
+        // ДАЛЕЕ ИСПОЛЬЗУЕМ filtered_args вместо args
+        auto args_to_use = filtered_args;
+
         // Проверка на конвейер
         bool has_pipe = false;
-        for (const auto& arg : args) {
+        for (const auto& arg : args_to_use) {
             if (arg == "|") {
                 has_pipe = true;
                 break;
@@ -466,7 +483,7 @@ int main() {
 
         // Проверка на оператор ИЛИ
         bool has_or = false;
-        for (const auto& arg : args) {
+        for (const auto& arg : args_to_use) {
             if (arg == "||") {
                 has_or = true;
                 break;
@@ -475,7 +492,7 @@ int main() {
 
         // Обработка конвейера
         if (has_pipe) {
-            auto commands = parse_pipeline(args);
+            auto commands = parse_pipeline(args_to_use);
             if (commands.size() < 2) {
                 cerr << "Invalid pipeline syntax" << endl;
                 continue;
@@ -504,8 +521,8 @@ int main() {
         }
 
         // Подготовка аргументов для выполнения
-        char **argv = get_argv_ptr(args);
-        size_t arg_count = args.size();
+        char **argv = get_argv_ptr(args_to_use);
+        size_t arg_count = args_to_use.size();
 
         // Обработка оператора ИЛИ
         if (has_or) {
@@ -521,7 +538,7 @@ int main() {
 
         // Обработка команды exit
         if (string(argv[0]) == "exit") {
-            free_argv(argv, args.size());
+            free_argv(argv, args_to_use.size());
             break;
         }
 
@@ -529,32 +546,28 @@ int main() {
         if (specCommands.contains(argv[0])) {
             if (background) {
                 cerr << "Background execution not supported for special commands" << endl;
-                free_argv(argv, args.size());
+                free_argv(argv, args_to_use.size());
                 continue;
             }
             if (!exec_spec_commands(argv)) {
                 cerr << "Error executing special command: " << argv[0] << endl;
             }
-            free_argv(argv, args.size());
+            free_argv(argv, args_to_use.size());
             continue;
         }
 
         // Выполнение обычной команды
-        auto start = chrono::high_resolution_clock::now();
-        int exit_code = execute_command(args, background);
-        auto end = chrono::high_resolution_clock::now();
+        auto cmd_start = chrono::high_resolution_clock::now();  // ПЕРЕИМЕНОВАНО
+        int exit_code = execute_command(args_to_use, background);
+        auto cmd_end = chrono::high_resolution_clock::now();    // ПЕРЕИМЕНОВАНО
         
-        // Вывод времени выполнения для foreground процессов (только в интерактивном режиме)
         if (!background && interactive) {
-            auto elapsed_ms = chrono::duration_cast<chrono::milliseconds>(end - start);
-            //cout << "Elapsed time: " << elapsed_ms.count() << " ms" << endl;
-            //cout << "Exit code: " << exit_code << endl;
+            auto elapsed_ms = chrono::duration_cast<chrono::milliseconds>(cmd_end - cmd_start);  // ИСПРАВЛЕНО
         }
 
-        free_argv(argv, args.size());
+        free_argv(argv, args_to_use.size());
     }
 
-    // Cleanup только в интерактивном режиме
     if (interactive) {
         // Завершаем все фоновые процессы
         for (auto it = background_processes.begin(); it != background_processes.end(); ) {
