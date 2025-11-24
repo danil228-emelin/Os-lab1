@@ -121,7 +121,6 @@ void apply_redirections_in_child(const vector<pair<string, string>>& redirection
 
 int child_routine(void *arg) {
   if (const auto argv = static_cast<char **>(arg); execvp(argv[0], argv) == -1) {
-    perror("execvp");
     exit(1);
   }
   return 0;
@@ -314,7 +313,7 @@ int execute_pipeline(vector<vector<string>> commands) {
 
     auto end = chrono::high_resolution_clock::now();
     auto elapsed_ms = chrono::duration_cast<chrono::milliseconds>(end - start);
-    cout << "Pipeline elapsed time: " << elapsed_ms.count() << " ms" << endl;
+    //cout << "Pipeline elapsed time: " << elapsed_ms.count() << " ms" << endl;
     
     if (WIFEXITED(status)) {
         return WEXITSTATUS(status);
@@ -355,8 +354,8 @@ bool handle_or_command(char** args, size_t arg_count) {
     auto end = chrono::high_resolution_clock::now();
     auto elapsed_ms = chrono::duration_cast<chrono::milliseconds>(end - start);
     
-    cout << "First command elapsed time: " << elapsed_ms.count() << " ms" << endl;
-    cout << "First command exit code: " << exit_code << endl;
+   // cout << "First command elapsed time: " << elapsed_ms.count() << " ms" << endl;
+    //cout << "First command exit code: " << exit_code << endl;
 
     if (exit_code != 0) {
         start = chrono::high_resolution_clock::now();
@@ -364,8 +363,8 @@ bool handle_or_command(char** args, size_t arg_count) {
         end = chrono::high_resolution_clock::now();
         elapsed_ms = chrono::duration_cast<chrono::milliseconds>(end - start);
         
-        cout << "Second command elapsed time: " << elapsed_ms.count() << " ms" << endl;
-        cout << "Second command exit code: " << exit_code << endl;
+        //cout << "Second command elapsed time: " << elapsed_ms.count() << " ms" << endl;
+        //cout << "Second command exit code: " << exit_code << endl;
     }
 
     return true;
@@ -403,13 +402,12 @@ int main() {
     while (true) {
         cleanup_background_processes();
         
-        cout << endl << pwd() << endl << "$ ";
+        cout <<"$ ";
         
         // Чтение ввода с проверкой на Ctrl+D (EOF)
         if (!getline(cin, input)) {
             if (cin.eof()) {
                 // Обнаружен Ctrl+D - выходим из shell
-                cout << endl << "EOF detected. Exiting shell..." << endl;
                 break;
             } else {
                 // Другая ошибка ввода
@@ -542,16 +540,17 @@ int main() {
         
         // Вывод времени выполнения для foreground процессов
         if (!background) {
-            auto elapsed_ms = chrono::duration_cast<chrono::milliseconds>(end - start);
-            cout << "Elapsed time: " << elapsed_ms.count() << " ms" << endl;
-            cout << "Exit code: " << exit_code << endl;
-        }
+            if (exit_code==0){
+                auto elapsed_ms = chrono::duration_cast<chrono::milliseconds>(end - start);
+                //cout << "Elapsed time: " << elapsed_ms.count() << " ms" << endl;
+                //cout << "Exit code: " << exit_code << endl;
+            }
+            }
+          
 
         free_argv(argv, args.size());
     }
 
-    // ФИНАЛЬНАЯ ОЧИСТКА ПЕРЕД ВЫХОДОМ
-    cout << "Performing final cleanup..." << endl;
     
     // Завершаем все фоновые процессы
     for (auto it = background_processes.begin(); it != background_processes.end(); ) {
@@ -596,6 +595,5 @@ int main() {
         }
     }
     
-    cout << "Shell terminated successfully." << endl;
     return 0;
 }

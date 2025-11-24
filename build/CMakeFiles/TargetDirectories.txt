@@ -1,0 +1,3 @@
+/home/danil-emelin/uni/4/osi/lab1/CustomCppShell/build/CMakeFiles/CustomShell.dir
+/home/danil-emelin/uni/4/osi/lab1/CustomCppShell/build/CMakeFiles/edit_cache.dir
+/home/danil-emelin/uni/4/osi/lab1/CustomCppShell/build/CMakeFiles/rebuild_cache.dir
