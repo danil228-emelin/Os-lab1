@@ -1,0 +1,11 @@
+10
+3 kiwi
+1 lemon
+5 mango
+2 nut
+4 orange
+8 pear
+6 apple
+1 banana
+7 cherry
+5 date

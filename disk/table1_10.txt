@@ -1,0 +1,11 @@
+10
+5 apple
+2 banana
+8 cherry
+1 date
+5 elder
+3 fig
+7 grape
+2 honey
+9 ice
+4 juice
