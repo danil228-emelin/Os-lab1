@@ -29,7 +29,7 @@ pids=()
 # Запуск инстансов
 for ((i=1; i<=instances; i++)); do
     echo "Запуск инстанса $i..."
-    ./cpu-calc-crc 5000 1048576 $i &
+    ./cpu-calc-crc-opt -i 5000 -s 4000 $i &
     pids+=($!)
     echo "Инстанс $i запущен с PID: ${pids[-1]}"
 done

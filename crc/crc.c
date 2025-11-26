@@ -66,7 +66,6 @@ void intensive_crc_calculation(int iterations, size_t data_size) {
         // Вычисляем CRC
         uint32_t result = crc32(test_data, data_size);
         
-        // Используем результат чтобы компилятор не оптимизировал вычисления
         final_result ^= result;
         
         // Прогресс для длительных вычислений
